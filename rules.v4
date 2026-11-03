@@ -1,0 +1,33 @@
+# ==============================================================================
+# Fichier : /etc/iptables/rules.v4
+# Description : Règles de filtrage d'état, filtrage MAC et NAT Masquerade
+# ==============================================================================
+
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# --- Filtrage de Sécurité par Adresse MAC ---
+# Blocage ciblé d'adresses MAC avant autorisation de sortie vers le WAN ens18
+-A FORWARD -o ens18 -m mac --mac-source ac:ed:5c:11:9a:a4 -j REJECT --reject-with icmp-port-unreachable
+
+# --- Routage Inter-VLAN & Sortie Internet ---
+# Autoriser le trafic sortant des sous-interfaces VLANs (ens19.10, ens19.20, ens19.30) vers ens18
+-A FORWARD -i ens19.+ -o ens18 -j ACCEPT
+
+# Autoriser les paquets de retour (Stateful Firewall)
+-A FORWARD -i ens18 -o ens19.+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+COMMIT
+
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+# Translation d'adresses source (SNAT / Masquerade) pour sortie Internet via ens18
+-A POSTROUTING -o ens18 -j MASQUERADE
+
+COMMIT

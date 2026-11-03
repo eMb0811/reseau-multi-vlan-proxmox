@@ -882,11 +882,15 @@ html_content = f"""<!DOCTYPE html>
 <span class="directive">:FORWARD</span> ACCEPT [0:0]
 <span class="directive">:OUTPUT</span> ACCEPT [0:0]
 
-<span class="comment"># 1. Autorise tous les flux sortants initiés depuis n'importe quel VLAN vers le WAN</span>
+<span class="comment"># 1. Filtrage de Sécurité : Blocage d'une adresse MAC spécifique vers le WAN ens18</span>
+<span class="comment"># Note : Syntaxe Linux obligatoire avec deux-points (:) et non tirets (-)</span>
+<span class="directive">-A FORWARD</span> -o ens18 -m mac --mac-source <span class="value">ac:ed:5c:11:9a:a4</span> -j <span class="value">REJECT --reject-with icmp-port-unreachable</span>
+
+<span class="comment"># 2. Autorise tous les flux sortants initiés depuis n'importe quel VLAN vers le WAN</span>
 <span class="directive">-A FORWARD</span> -i ens19.+ -o ens18 -j <span class="value">ACCEPT</span>
 
-<span class="comment"># 2. Suivi de connexion stateful : Autorise uniquement le trafic de retour légitime</span>
-<span class="directive">-A FORWARD</span> -i ens18 -o ens19.+ -m state --state <span class="value">RELATED,ESTABLISHED</span> -j <span class="value">ACCEPT</span>
+<span class="comment"># 3. Suivi de connexion stateful : Autorise uniquement le trafic de retour légitime</span>
+<span class="directive">-A FORWARD</span> -i ens18 -o ens19.+ -m conntrack --ctstate <span class="value">RELATED,ESTABLISHED</span> -j <span class="value">ACCEPT</span>
 
 <span class="keyword">COMMIT</span></pre>
     </div>
@@ -1007,20 +1011,16 @@ html_content = f"""<!DOCTYPE html>
 <span class="comment"># Port du serveur Web HTTP intégré (accès : http://10.153.4.174:3000)</span>
 <span class="directive">-w</span>=<span class="value">3000</span>
 
-<span class="comment"># Interfaces à capturer en mode passif (Interface WAN et les 3 sous-interfaces VLAN)</span>
-<span class="directive">-i</span>=<span class="value">ens18</span>
+<span class="comment"># Interfaces LAN exclusives à capturer (Trunk 802.1Q - exclusion du WAN ens18)</span>
 <span class="directive">-i</span>=<span class="value">ens19.10</span>
 <span class="directive">-i</span>=<span class="value">ens19.20</span>
 <span class="directive">-i</span>=<span class="value">ens19.30</span>
 
-<span class="comment"># Déclaration des sous-réseaux locaux internes pour la classification des flux</span>
-<span class="directive">-m</span>=<span class="value">"192.168.10.0/24,192.168.20.0/24,192.168.30.0/24,10.153.4.0/24"</span>
+<span class="comment"># Déclaration exclusive des sous-réseaux locaux du LAN</span>
+<span class="directive">-m</span>=<span class="value">192.168.10.0/24,192.168.20.0/24,192.168.30.0/24</span>
 
-<span class="comment"># Chemin du fichier de traces d'exécution</span>
-<span class="directive">-l</span>=<span class="value">/var/log/ntopng.log</span>
-
-<span class="comment"># Fichier de PID pour la gestion du démon systemd</span>
-<span class="directive">-d</span>=<span class="value">/var/run/ntopng.pid</span></pre>
+<span class="comment"># Répertoire de stockage des données de métrologie</span>
+<span class="directive">-d</span>=<span class="value">/var/lib/ntopng</span></pre>
     </div>
 
     <div class="explanation-box no-break">

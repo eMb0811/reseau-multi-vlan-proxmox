@@ -1,0 +1,41 @@
+# ==============================================================================
+# Fichier : /etc/netplan/60-routeur-tp.yaml
+# Description : Configuration Netplan pour la VM 312 (routeur-groupe)
+#               Interface WAN physique + Trunk VLAN 802.1Q (ens19.10, .20, .30)
+# ==============================================================================
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens18:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - 10.153.4.174/24
+      routes:
+        - to: default
+          via: 10.153.4.254
+      nameservers:
+        addresses:
+          - 172.16.2.11
+          - 1.1.1.1
+    ens19:
+      dhcp4: false
+      dhcp6: false
+  vlans:
+    ens19.10:
+      id: 10
+      link: ens19
+      addresses:
+        - 192.168.10.254/24
+    ens19.20:
+      id: 20
+      link: ens19
+      addresses:
+        - 192.168.20.254/24
+    ens19.30:
+      id: 30
+      link: ens19
+      addresses:
+        - 192.168.30.254/24

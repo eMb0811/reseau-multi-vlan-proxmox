@@ -2,7 +2,7 @@
 # ==============================================================================
 # Script : install_ntopng.sh
 # Description : Installation de Redis, NTOPng, configuration du port 3000
-#               et supervision des interfaces (WAN + 3 VLANs)
+#               et supervision exclusive du LAN (VLANs 10, 20 et 30)
 # ==============================================================================
 
 set -euo pipefail
@@ -14,7 +14,7 @@ echo "=========================================================="
 sudo apt-get update -y
 sudo apt-get install -y redis-server curl wget gnupg software-properties-common lsb-release
 
-# Démarrer et activer Redis (requis par NTOPng pour stocker l'état et les métriques)
+# Démarrer et activer Redis
 sudo systemctl enable redis-server
 sudo systemctl restart redis-server
 
@@ -22,7 +22,6 @@ echo "=========================================================="
 echo " [2/4] Configuration du dépôt NTOPng et installation..."
 echo "=========================================================="
 
-# Essayer d'installer ntopng directement depuis les dépôts Ubuntu
 if apt-cache show ntopng >/dev/null 2>&1; then
     echo "Paquet ntopng disponible dans les dépôts locaux, installation..."
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ntopng
@@ -37,45 +36,45 @@ else
 fi
 
 echo "=========================================================="
-echo " [3/4] Configuration de NTOPng (/etc/ntopng/ntopng.conf)..."
+echo " [3/4] Configuration de NTOPng (Supervision LAN exclusive)..."
 echo "=========================================================="
 
 sudo mkdir -p /etc/ntopng
 
-# Création du fichier de configuration ntopng.conf
+# Configuration restreinte aux VLANs locaux (ens19.10, ens19.20, ens19.30)
 sudo tee /etc/ntopng/ntopng.conf > /dev/null << 'EOF'
-# Fichier PID
--G=/var/run/ntopng.pid
-
-# Port du serveur HTTP (Interface Web)
+-i=ens19.10
+-i=ens19.20
+-i=ens19.30
 -w=3000
-
-# Interfaces à écouter (WAN + les 3 VLANs)
--i=eth0
--i=vlan10
--i=vlan20
--i=vlan30
-
-# Définition des sous-réseaux locaux pour le suivi des flux internes
 -m=192.168.10.0/24,192.168.20.0/24,192.168.30.0/24
+-d=/var/lib/ntopng
+EOF
 
-# Résolution DNS numérique (évite la saturation DNS)
--n=1
+# Ajustement de l'unité systemd (Type=simple pour démarrage robuste)
+sudo tee /etc/systemd/system/ntopng.service > /dev/null << 'EOF'
+[Unit]
+Description=ntopng - High-Speed Web-based Traffic Analysis and Flow Collection Tool
+After=network.target redis-server.service
 
-# Journalisation
--e=
+[Service]
+Type=simple
+ExecStart=/usr/sbin/ntopng /etc/ntopng/ntopng.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
 echo "=========================================================="
 echo " [4/4] Démarrage du service NTOPng..."
 echo "=========================================================="
 
-# Recharger les démons et démarrer ntopng
 sudo systemctl daemon-reload
 sudo systemctl enable ntopng
 sudo systemctl restart ntopng
 
-# Vérification du port 3000
 echo ""
 echo "Vérification de l'écoute sur le port 3000 :"
 sudo ss -tulpn | grep 3000 || echo "NTOPng est en cours d'initialisation..."
@@ -83,9 +82,6 @@ sudo ss -tulpn | grep 3000 || echo "NTOPng est en cours d'initialisation..."
 echo ""
 echo "=========================================================="
 echo " NTOPng est déployé avec succès !"
-echo " Accès Web : http://<IP_DE_VOTRE_VM>:3000"
-echo " Identifiants par défaut :"
-echo "   - Utilisateur : admin"
-echo "   - Mot de passe : admin"
-echo " (Le mot de passe vous sera demandé d'être modifié dès la 1ère connexion)"
+echo " Accès Web : http://10.153.4.174:3000"
+echo " Interfaces surveillées : ens19.10, ens19.20, ens19.30 (LAN Only)"
 echo "=========================================================="

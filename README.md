@@ -4,9 +4,9 @@
 [![Platform](https://img.shields.io/badge/Hyperviseur-Proxmox%20VE%208.x-E57000?style=for-the-badge&logo=proxmox)](https://www.proxmox.com)
 [![OS](https://img.shields.io/badge/Routeur-Ubuntu%2022.04%20LTS-E95420?style=for-the-badge&logo=ubuntu)](https://ubuntu.com)
 [![Hardware](https://img.shields.io/badge/Switch-Cisco%20Catalyst%202950G-1BA0D7?style=for-the-badge&logo=cisco)](https://www.cisco.com)
-[![Monitoring](https://img.shields.io/badge/Supervision-NTOPng%20%2B%20Redis-blue?style=for-the-badge)](http://10.153.4.174:3000)
+[![Monitoring](https://img.shields.io/badge/Supervision-NTOPng%20LAN%20Only-blue?style=for-the-badge)](http://10.153.4.174:3000)
 
-> **Projet complet d'administration système & réseau :** Déploiement d'un routeur virtuel d'entreprise (*Router-on-a-Stick*), segmentation 802.1Q sur commutateur physique Cisco, services DHCP/DNS récursif, translation d'adresses NAT Masquerade et métrologie de flux réseau en temps réel avec NTOPng.
+> **Projet complet d'administration système & réseau :** Déploiement d'un routeur virtuel d'entreprise (*Router-on-a-Stick*), segmentation 802.1Q sur commutateur physique Cisco, services ISC-DHCP / DNS récursif BIND9, filtrage par état & adresses MAC, translation d'adresses NAT Masquerade et métrologie de flux réseau en temps réel avec NTOPng (restreint au LAN).
 
 ---
 
@@ -45,7 +45,7 @@ Le rapport complet de 19 pages détaillant l'ensemble des étapes, justification
 |       |      * ens19.10 : 192.168.10.254/24 (Passerelle Étudiants)                               |   |
 |       |      * ens19.20 : 192.168.20.254/24 (Passerelle Personnel)                               |   |
 |       |      * ens19.30 : 192.168.30.254/24 (Passerelle Visiteurs)                               |   |
-|       | - Services : Routage Kernel, NAT Masquerade, DHCP ISC, Cache BIND9, Sonde NTOPng         |   |
+|       | - Services : Routage Kernel, NAT Masquerade, DHCP ISC, Cache BIND9, NTOPng (LAN Only)    |   |
 |       +------------------------------------------------------------------------------------------+   |
 +----------------------------------------------------------------------------------|-------------------+
                                                                                    | Câble Ethernet
@@ -88,22 +88,52 @@ Le rapport complet de 19 pages détaillant l'ensemble des étapes, justification
 ├── rapport_tp_admin_reseau.html     # Source HTML haute fidélité du rapport
 ├── generate_pdf_report.py           # Script Python de compilation PDF vectoriel
 ├── cisco_switch_config.ios          # Script IOS Cisco complet commenté
-├── 01-netplan-static.yaml           # Configuration Netplan WAN & VLANs
+├── 60-routeur-tp.yaml               # Configuration Netplan en production sur la VM 312
+├── 01-netplan-static.yaml           # Variante Netplan statique
 ├── 01-netplan-dhcp.yaml             # Variante Netplan en DHCP
+├── dhcpd.conf                       # Configuration ISC-DHCP Server (3 pools VLANs)
+├── named.conf.options               # Configuration DNS récursif BIND9
+├── rules.v4                         # Règles de filtrage Iptables & NAT Masquerade
+├── ntopng.conf                      # Configuration NTOPng (Supervision LAN exclusive)
 ├── setup_router_nat.sh              # Script d'automatisation routage Kernel & NAT iptables
-├── setup_dnsmasq.sh                 # Script d'automatisation des services réseau
+├── setup_dnsmasq.sh                 # Script d'automatisation alternatif Dnsmasq
 ├── dnsmasq.conf                     # Configuration alternative Dnsmasq
 ├── install_ntopng.sh                # Script de déploiement NTOPng & Redis
 ├── GUIDE_DEPLOIEMENT.md             # Synthèse textuelle d'exploitation
-├── ntopng_dashboard.png             # Preuve visuelle de la supervision (Port 3000)
+├── ntopng_dashboard.png             # Capture du tableau de bord NTOPng (Port 3000)
 └── README.md                        # Documentation d'accueil GitHub
 ```
 
 ---
 
+## 🛡️ Filtrage de Sécurité & Commandes Administrateur
+
+### 1. Blocage d'une adresse MAC vers Internet
+Pour empêcher une station de travail spécifique d'accéder au WAN / Internet tout en conservant son accès au réseau local :
+
+```bash
+# Blocage immédiat avec notification ICMP (REJECT)
+# ATTENTION : Les adresses MAC sous Linux s'écrivent avec des deux-points (:)
+sudo iptables -I FORWARD 1 -m mac --mac-source ac:ed:5c:11:9a:a4 -o ens18 -j REJECT
+
+# Variante silencieuse (DROP)
+sudo iptables -I FORWARD 1 -m mac --mac-source ac:ed:5c:11:9a:a4 -o ens18 -j DROP
+
+# Sauvegarde permanente au redémarrage
+sudo netfilter-persistent save
+```
+
+### 2. Supervision NTOPng restreinte au LAN
+Pour concentrer l'analyse uniquement sur les flux des utilisateurs internes et éliminer le bruit du réseau universitaire :
+* **Interfaces capturées :** `ens19.10`, `ens19.20`, `ens19.30` (exclusion de `ens18`).
+* **Sous-réseaux locaux :** `192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24`.
+* **Accès web :** `http://10.153.4.174:3000`.
+
+---
+
 ## 🛠️ Points Techniques Remarquables
 
-1. **Résolution Multi-Tenant :** Restauration de la VM 311 sur son snapshot `Final` (Groupe 1 sur `vmbr1`), et déploiement étanche de la **VM 312** (`routeur-groupe`, WAN `10.153.4.174` sur `vmbr2`).
+1. **Isolation Multi-Tenant :** Affectation de l'autre groupe (VM 311) sur `vmbr1` / `enp3s0f0`, et étanchéité de notre **VM 312** (`routeur-groupe`, WAN `10.153.4.174` sur `vmbr2` / `enp3s0f1`).
 2. **Cisco Spanning-Tree Portfast :** Activation de `spanning-tree portfast` sur tous les ports d'accès pour contourner le délai de 30 secondes d'apprentissage STP 802.1D et garantir la négociation immédiate des baux DHCP.
 3. **Détection Physique sur Proxmox :** Identification de la porteuse active (`carrier = 1`) sur l'interface serveur `enp3s0f1` et liaison à chaud sur `vmbr2` en mode `bridge-vlan-aware yes`.
 4. **NAT Masquerade & Stateful Filtering :** Translation dynamique SNAT par `iptables` sur `ens18` et filtrage de retour sécurisé par suivi d'état `RELATED,ESTABLISHED`.
@@ -116,7 +146,7 @@ Le rapport complet de 19 pages détaillant l'ensemble des étapes, justification
 * **Bail DHCP PC Client (Port Fa0/2 - VLAN 10) :** `192.168.10.101/24`, Passerelle `192.168.10.254`, Suffixe `etudiants.local`.
 * **Ping Passerelle du Routeur :** 0% de perte, latence `< 1 ms`.
 * **Sortie Internet Réelle :** `curl -I --interface 192.168.10.101 https://www.google.com` &rarr; `HTTP/1.1 200 OK`.
-* **Tableau de Bord NTOPng :** Capture des flux en temps réel sur les 4 interfaces (`ens18`, `ens19.10`, `ens19.20`, `ens19.30`).
+* **Tableau de Bord NTOPng :** Capture des flux en temps réel sur les interfaces locales (`ens19.10`, `ens19.20`, `ens19.30`).
 
 ---
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Script : setup_router_nat.sh
-# Description : Activation du routage IPv4, configuration NAT et persistance
+# Description : Activation du routage IPv4, filtrage d'état, filtrage MAC,
+#               NAT Masquerade et persistance (iptables-persistent)
 # ==============================================================================
 
 set -euo pipefail
@@ -26,38 +27,28 @@ echo "=========================================================="
 echo " [2/4] Configuration des règles Iptables (NAT & Filtrage)..."
 echo "=========================================================="
 
-# Interface WAN (sortie Internet)
-WAN_IF="eth0"
+# Interface WAN (sortie réseau campus / Internet)
+WAN_IF="ens18"
 
-# Règle de NAT / Masquerade demandée
+# 1. Règle de NAT / Masquerade
 sudo iptables -t nat -C POSTROUTING -o "$WAN_IF" -j MASQUERADE 2>/dev/null || \
 sudo iptables -t nat -A POSTROUTING -o "$WAN_IF" -j MASQUERADE
 
-# Autoriser le transfert (FORWARD) des VLANs vers Internet
-sudo iptables -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
-sudo iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+# 2. Sécurité : Filtrage par adresse MAC (Exemple de blocage spécifique)
+# Note : Toujours utiliser le format avec deux-points (ex: ac:ed:5c:11:9a:a4)
+# sudo iptables -I FORWARD 1 -m mac --mac-source ac:ed:5c:11:9a:a4 -o "$WAN_IF" -j REJECT --reject-with icmp-port-unreachable
 
-# Autoriser le trafic sortant de tous les VLANs vers le WAN
-sudo iptables -C FORWARD -i vlan10 -o "$WAN_IF" -j ACCEPT 2>/dev/null || \
-sudo iptables -A FORWARD -i vlan10 -o "$WAN_IF" -j ACCEPT
+# 3. Autoriser les paquets de retour (Stateful Firewall)
+sudo iptables -C FORWARD -i "$WAN_IF" -o ens19.+ -m conntrack --ctstate RELATED,ESTABLISHED 2>/dev/null || \
+sudo iptables -A FORWARD -i "$WAN_IF" -o ens19.+ -m conntrack --ctstate RELATED,ESTABLISHED
 
-sudo iptables -C FORWARD -i vlan20 -o "$WAN_IF" -j ACCEPT 2>/dev/null || \
-sudo iptables -A FORWARD -i vlan20 -o "$WAN_IF" -j ACCEPT
-
-sudo iptables -C FORWARD -i vlan30 -o "$WAN_IF" -j ACCEPT 2>/dev/null || \
-sudo iptables -A FORWARD -i vlan30 -o "$WAN_IF" -j ACCEPT
+# 4. Autoriser le trafic sortant des VLANs (ens19.10, ens19.20, ens19.30) vers ens18
+sudo iptables -C FORWARD -i ens19.+ -o "$WAN_IF" -j ACCEPT 2>/dev/null || \
+sudo iptables -A FORWARD -i ens19.+ -o "$WAN_IF" -j ACCEPT
 
 echo "=========================================================="
-echo " [3/4] Installation et sauvegarde de la persistance Iptables..."
+echo " [3/4] Sauvegarde de la persistance Iptables..."
 echo "=========================================================="
-
-# Pré-configuration debconf pour éviter les invites interactives bloquantes
-echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | sudo debconf-set-selections
-echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | sudo debconf-set-selections
-
-# Installation silencieuse de iptables-persistent
-sudo apt-get update -y
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent netfilter-persistent
 
 # Sauvegarde des règles IPv4 dans /etc/iptables/rules.v4
 sudo netfilter-persistent save
@@ -65,10 +56,13 @@ sudo netfilter-persistent save
 echo "=========================================================="
 echo " [4/4] Vérification de la configuration"
 echo "=========================================================="
+echo "Règles de filtrage FORWARD actives :"
+sudo iptables -L FORWARD -v -n
+echo ""
 echo "Règles NAT actives :"
 sudo iptables -t nat -L POSTROUTING -v -n
 echo ""
 echo "Statut IP Forwarding :"
 cat /proc/sys/net/ipv4/ip_forward
 echo ""
-echo "=> Routage IPv4 et NAT configurés avec succès et persistants au reboot !"
+echo "=> Routage IPv4, filtrage et NAT configurés avec succès !"

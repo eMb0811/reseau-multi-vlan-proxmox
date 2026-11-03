@@ -1,0 +1,24 @@
+// ==============================================================================
+// Fichier : /etc/bind/named.conf.options
+// Description : Serveur DNS BIND9 récursif et cache pour les VLANs
+// ==============================================================================
+
+options {
+    directory "/var/cache/bind";
+
+    // Écoute sur les passerelles des 3 VLANs et la boucle locale
+    listen-on { 192.168.10.254; 192.168.20.254; 192.168.30.254; 127.0.0.1; };
+    listen-on-v6 { none; };
+
+    // Autoriser les requêtes et la récursion pour les clients des 3 VLANs
+    allow-query { 192.168.10.0/24; 192.168.20.0/24; 192.168.30.0/24; 127.0.0.1; };
+    allow-recursion { 192.168.10.0/24; 192.168.20.0/24; 192.168.30.0/24; 127.0.0.1; };
+
+    // Serveurs DNS amont (Forwarders)
+    forwarders {
+        8.8.8.8;
+        1.1.1.1;
+    };
+
+    dnssec-validation auto;
+};
