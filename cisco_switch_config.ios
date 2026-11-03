@@ -1,0 +1,81 @@
+! ==============================================================================
+! Configuration Cisco IOS pour le Switch physique (Port Console)
+! Architecture TP : 3 VLANs + 1 Port Trunk vers Proxmox (vmbr2)
+! ==============================================================================
+
+enable
+configure terminal
+
+! -------------------------------------------------------------
+! 1. CRÉATION DES VLANS
+! -------------------------------------------------------------
+vlan 10
+ name Etudiants
+ exit
+
+vlan 20
+ name Personnel
+ exit
+
+vlan 30
+ name Visiteurs
+ exit
+
+! -------------------------------------------------------------
+! 2. CONFIGURATION DU PORT TRUNK VERS PROXMOX (vmbr2)
+! Remplacez GigabitEthernet0/24 par le port physique relié au serveur Proxmox
+! -------------------------------------------------------------
+interface GigabitEthernet0/24
+ description TRUNK-VERS-PROXMOX-VMBR2
+ ! Note: La commande d'encapsulation est nécessaire sur les Catalyst 3560/3750,
+ ! mais peut être rejetée/inutile sur les Catalyst 2960/séries récentes.
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30
+ spanning-tree portfast trunk
+ no shutdown
+ exit
+
+! -------------------------------------------------------------
+! 3. CONFIGURATION DES PORTS D'ACCÈS POUR LES ÉQUIPEMENTS CLIENTS
+! Adaptez les numéros de ports selon vos besoins de câblage
+! -------------------------------------------------------------
+
+! Ports 1 à 8 : VLAN 10 (Étudiants)
+interface range GigabitEthernet0/1 - 8
+ description ACCES-VLAN10-ETUDIANTS
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! Ports 9 à 16 : VLAN 20 (Personnel)
+interface range GigabitEthernet0/9 - 16
+ description ACCES-VLAN20-PERSONNEL
+ switchport mode access
+ switchport access vlan 20
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! Ports 17 à 22 : VLAN 30 (Visiteurs)
+interface range GigabitEthernet0/17 - 22
+ description ACCES-VLAN30-VISITEURS
+ switchport mode access
+ switchport access vlan 30
+ spanning-tree portfast
+ no shutdown
+ exit
+
+end
+
+! Sauvegarde de la configuration en NVRAM
+write memory
+
+! -------------------------------------------------------------
+! 4. COMMANDES DE VÉRIFICATION
+! -------------------------------------------------------------
+! show vlan brief
+! show interfaces trunk
+! show mac address-table

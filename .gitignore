@@ -1,0 +1,21 @@
+# Fichiers temporaires et de cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Fichiers de test temporaires
+test.html
+test.pdf
+preview_cover.png
+vm312_actual_configs.json
+
+# Environnements virtuels
+.env
+.venv
+env/
+venv/
+
+# Antigravity & IDE
+.system_generated/
+.gemini/

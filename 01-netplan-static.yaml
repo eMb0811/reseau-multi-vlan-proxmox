@@ -1,0 +1,45 @@
+# Configuration Netplan finale - Phase 2 (IP Statique sur WAN + VLANs Trunk)
+# Fichier à placer dans /etc/netplan/01-netcfg.yaml
+# Remplacez <IP_WAN>, <PASSERELLE_WAN> et <DNS> par les valeurs relevées lors de la phase 1
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        # EXEMPLE : mettez ici l'adresse IP et le masque attribués par l'université
+        - 10.153.4.250/24
+      routes:
+        - to: default
+          # Passerelle du réseau université (relevée avec 'ip route')
+          via: 10.153.4.1
+      nameservers:
+        addresses:
+          - 10.153.4.1
+          - 1.1.1.1
+          - 8.8.8.8
+    eth1:
+      dhcp4: false
+      dhcp6: false
+
+  vlans:
+    vlan10:
+      id: 10
+      link: eth1
+      addresses:
+        - 192.168.10.1/24
+
+    vlan20:
+      id: 20
+      link: eth1
+      addresses:
+        - 192.168.20.1/24
+
+    vlan30:
+      id: 30
+      link: eth1
+      addresses:
+        - 192.168.30.1/24
